@@ -1,0 +1,19 @@
+{
+	"user": "Nickk888SAMP",
+	"repo": "Inventory-Framework",
+	"entry": "example.pwn",
+	"output": "example.amx",
+	"dependencies": [
+		"pawn-lang/samp-stdlib",
+		"pawn-lang/YSI-includes:v5.06.1932"
+	],
+	"runtime": {
+		"version": "0.3.7",
+		"mode": "server",
+		"rcon_password": "password",
+		"port": 7777,
+		"hostname": "SA-MP Server",
+		"maxplayers": 50,
+		"language": ""
+	}
+}
