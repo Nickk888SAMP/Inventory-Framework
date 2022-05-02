@@ -3,47 +3,23 @@
 
 Script: NInventory
 Type: Include
-Version: Dev 1.0
+Version: Dev 1.1
 Author: Nickk888
-Date: 10.04.2022
+Date: 02.05.2022
 
 Social Media:
 YouTube: https://www.youtube.com/channel/UCvjbpjJXET1QS9Wa0_XVCuw
 Facebook: https://www.facebook.com/Nickk888FP/
 
 Functions_________________________
-Item:CreateItem(const name[]);
-IsValidItem(Item:item);
-ItemNameExists(const name[], bool:ignorecase = true);
-IsValidItemID(itemid);
-Item:GetItemFromItemID(itemid);
-RemoveItem(Item:item);
-SafeRemoveItem(Item:item, & Item:nextItem);
 
-Get:
-GetItemFloatData(Item:item, arrayId);
-GetItemIntData(Item:item, arrayId);
-GetItemIconName(Item:item);
-GetItemDescription(Item:item);
-GetItemName(Item:item);
-GetItemStackSize(Item:item);
-GetItemModelID(Item:item);
-GetItemDatabaseID(Item:item);
-GetItemItemID(Item:item);
-
-Set:
-SetItemFloatData(Item:item, arrayId, Float:floatData);
-SetItemIntData(Item:item, arrayId, intData);
-SetItemIconName(Item:item, const newiconname[]);
-SetItemDescription(Item:item, const newdescription[]);
-SetItemName(Item:item, const newname[]);
-SetItemStackSize(Item:item, newstacksize);
-SetItemModelID(Item:item, newmodelid);
-SetItemDatabaseID(Item:item, newdbid);
-SetItemItemID(Item:item, newItemID);
 
 Callbacks_________________________
 OnPlayerGetItem(playerid, Item:item, amount, remains);
+
+Loops____________________________
+LOOP_ITEMS(variableName) - Loops through the server items, returns item as tag "Item".
+LOOP_PLAYER_ITEMS(playerid, variablName) - Loops through the player items, returns item as tag "PlayerItem".
 
 *************************************************************/
 
@@ -79,14 +55,15 @@ forward OnPlayerGetItem(playerid, Item:item, amount, remains);
     #define MAX_PLAYER_ITEMS 20
 #endif
 
+#define LOOP_ITEMS(%1) foreach(new Item:%1 : NI_I_ITEMS) 
+#define LOOP_PLAYER_ITEMS(%1,%2) foreach(new PlayerItem:%2 : NI_I_PITEMS[%1]) 
+
 /************************************************************
                         INTERNALS
 *************************************************************/
 
 #define NI_MAX_DATA_AMOUNT 20
 #define NI_VALID_ITER_FREE(%1,%2) %2 >= 0 && %2 < Iter_End(%1)
-#define LOOP_ITEMS(%1) foreach(new Item:%1 : NI_I_ITEMS) 
-#define LOOP_PLAYER_ITEMS(%1,%2) foreach(new PlayerItem:%2 : NI_I_PITEMS[%1]) 
 
 /************************************************************
                         ITERATORS
@@ -167,7 +144,7 @@ stock Item:CreateItem(const name[])
 forward Float:GetItemFloatData(Item:item, arrayId);
 stock Float:GetItemFloatData(Item:item, arrayId)
 {
-    if(!IsValidItem(item) && arrayId < 0 && arrayId >= NI_MAX_DATA_AMOUNT)
+    if(!IsValidItem(item) || arrayId < 0 || arrayId >= NI_MAX_DATA_AMOUNT)
         return 0;
 
     return NI_Item[_:item][ni_i_floatData][arrayId];
@@ -176,7 +153,7 @@ stock Float:GetItemFloatData(Item:item, arrayId)
 /* Gets item intiger data inside the Item */
 stock GetItemIntData(Item:item, arrayId)
 {
-    if(!IsValidItem(item) && arrayId < 0 && arrayId >= NI_MAX_DATA_AMOUNT)
+    if(!IsValidItem(item) || arrayId < 0 || arrayId >= NI_MAX_DATA_AMOUNT)
         return 0;
 
     return NI_Item[_:item][ni_i_intData][arrayId];
@@ -222,6 +199,15 @@ stock GetItemStackSize(Item:item)
         return 0;
 
     return NI_Item[item][ni_i_stackSize];
+}
+
+/* Gets the item ID from player inventory */
+stock GetPlayerItemID(playerid, PlayerItem:pitem)
+{
+    if(!IsValidPlayerItem(playerid, pitem))
+        return 0;
+
+    return NI_PlayerItem[playerid][pitem][ni_pi_itemId];
 }
 
 /* Gets the item amount from player inventory */
@@ -275,7 +261,7 @@ stock GetItemItemID(Item:item)
 /* Sets new item intiger data inside the Item */
 stock SetItemFloatData(Item:item, arrayId, Float:floatData)
 {
-    if(!IsValidItem(item) && arrayId < 0 && arrayId >= NI_MAX_DATA_AMOUNT)
+    if(!IsValidItem(item) || arrayId < 0 || arrayId >= NI_MAX_DATA_AMOUNT)
         return 0;
 
     NI_Item[item][ni_i_floatData][arrayId] = floatData;
@@ -285,7 +271,7 @@ stock SetItemFloatData(Item:item, arrayId, Float:floatData)
 /* Sets new item intiger data inside the Item */
 stock SetItemIntData(Item:item, arrayId, intData)
 {
-    if(!IsValidItem(item) && arrayId < 0 && arrayId >= NI_MAX_DATA_AMOUNT)
+    if(!IsValidItem(item) || arrayId < 0 || arrayId >= NI_MAX_DATA_AMOUNT)
         return 0;
 
     NI_Item[item][ni_i_intData][arrayId] = intData;
@@ -493,6 +479,59 @@ stock SafeRemovePlayerItem(playerid, PlayerItem:item, & PlayerItem:nextItem)
         return 1;
     }
     return 0;
+}
+
+/* Transfers Player Item from player A to player B */
+stock TransferPlayerItemToPlayer(playeridA, playeridB, PlayerItem:item, amount)
+{
+    if(amount <= 0 || !IsPlayerConnected(playeridA) || !IsPlayerConnected(playeridB))
+        return 0;
+
+    if(!IsValidPlayerItem(playeridA, item))
+        return 0;
+
+    if(GetPlayerItemAmount(playeridA, item) >= amount)
+    {
+        GivePlayerItem(playeridB, GetPlayerItemServerItem(playeridA, item), amount);
+        TakePlayerItem(playeridA, item, amount);
+        return 1;
+    }
+    return 0;
+}
+
+/* Take player item with amount */
+stock TakePlayerItem(playerid, PlayerItem:pitem, amount)
+{
+    if(!IsValidPlayerItem(playerid, pitem))
+        return 0;
+
+    if(GetPlayerItemAmount(playerid, pitem) >= amount)
+    {
+        NI_PlayerItem[playerid][pitem][ni_pi_amount] -= amount;
+        if(NI_PlayerItem[playerid][pitem][ni_pi_amount] == 0)
+        {
+            RemovePlayerItem(playerid, pitem);
+        }
+    }
+    return 1;
+}
+
+/* Savely takes player item with amount. Used in loops. */
+stock SafeTakePlayerItem(playerid, PlayerItem:pitem, amount, & PlayerItem:nextItem)
+{
+    if(!IsValidPlayerItem(playerid, pitem))
+        return 0;
+
+    if(GetPlayerItemAmount(playerid, pitem) >= amount)
+    {
+        NI_PlayerItem[playerid][pitem][ni_pi_amount] -= amount;
+        if(NI_PlayerItem[playerid][pitem][ni_pi_amount] == 0)
+        {
+            SafeRemovePlayerItem(playerid, pitem, nextItem);
+        }
+        else nextItem = PlayerItem:Iter_Next(NI_I_PITEMS[playerid], pitem);
+    }
+    return 1;
 }
 
 /* Gives player an item with amount */
