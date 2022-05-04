@@ -55,8 +55,10 @@ forward OnPlayerGetItem(playerid, Item:item, amount, remains);
     #define MAX_PLAYER_ITEMS 20
 #endif
 
-#define LOOP_ITEMS(%1) foreach(new Item:%1 : NI_I_ITEMS) 
-#define LOOP_PLAYER_ITEMS(%1,%2) foreach(new PlayerItem:%2 : NI_I_PITEMS[%1]) 
+/* Loops through all Items returning the Item object. */
+#define LOOP_ITEMS(%1) foreach(new Item:%1 : NI_I_ITEMS)
+/* Loops through all player Items returning the PlayerItem object. */
+#define LOOP_PLAYER_ITEMS(%1,%2) foreach(new PlayerItem:%2 : NI_I_PITEMS[%1])
 
 /************************************************************
                         INTERNALS
@@ -83,6 +85,7 @@ enum NI_E_ITEM // Stores Server Items
     ni_i_dbId,
 	ni_i_name[128],
 	ni_i_desc[128],
+    ni_i_category,
 	ni_i_intData[NI_MAX_DATA_AMOUNT],
     ni_i_objModelId,
 	ni_i_iconName[128],
@@ -116,25 +119,34 @@ hook OnScriptInit()
 *************************************************************/
 
 /* Creates new item returning the internal item ID */
-stock Item:CreateItem(const name[])
+stock Item:CreateItem(const name[], const description[] = "", stacksize = 1, category = 0, objectmodelid = 0, dbid = 0, itemid = -1, const iconname[] = "")
 {
     new Item:item = Item:Iter_Free(NI_I_ITEMS);
     if(NI_VALID_ITER_FREE(NI_I_ITEMS, _:item))
     {
         Iter_Add(NI_I_ITEMS, item);
         NI_Item[item][ni_i_valid] = true;
-        NI_Item[item][ni_i_itemid] = (_:item + 1);
-        NI_Item[item][ni_i_dbId] = 0;
-        NI_Item[item][ni_i_objModelId] = 0;
-        NI_Item[item][ni_i_stackSize] = 1;
+        NI_Item[item][ni_i_itemid] = ((itemid == -1) ? (_:item + 1) : (itemid));
+        NI_Item[item][ni_i_dbId] = dbid;
+        NI_Item[item][ni_i_category] = category;
+        NI_Item[item][ni_i_objModelId] = objectmodelid;
+        NI_Item[item][ni_i_stackSize] = ((stacksize > 0) ? (stacksize) : (1));
         strpack(NI_Item[item][ni_i_name], name, 128);
-        strpack(NI_Item[item][ni_i_desc], "", 128);
-        strpack(NI_Item[item][ni_i_iconName], "", 128);
+        strpack(NI_Item[item][ni_i_desc], description, 128);
+        strpack(NI_Item[item][ni_i_iconName], iconname, 128);
         for(new i; i < NI_MAX_DATA_AMOUNT; i++)
         {
             NI_Item[item][ni_i_intData][i] = 0;
             NI_Item[item][ni_i_floatData][i] = 0.0;
         }
+        #if defined NI_DEBUG
+        printf("[NINVENTORY - DEBUG] Created Item '%s', Description '%s', ItemID '%i', Stacksize '%i', Index '%i'", 
+            name, 
+            description, 
+            NI_Item[item][ni_i_itemid],
+            NI_Item[item][ni_i_stackSize],
+            _:item);
+        #endif
         return item;
     }
     return Item:-1;
@@ -192,6 +204,15 @@ stock GetItemName(Item:item)
     return unpackedItemStr;
 }
 
+/* Gets item category ID inside the Item */
+stock GetItemCategory(Item:item)
+{
+    if(!IsValidItem(item))
+        return 0;
+
+    return NI_Item[item][ni_i_category];
+}
+
 /* Gets item stack size inside the Item */
 stock GetItemStackSize(Item:item)
 {
@@ -219,8 +240,8 @@ stock GetPlayerItemAmount(playerid, PlayerItem:pitem)
     return NI_PlayerItem[playerid][pitem][ni_pi_amount];
 }
 
-/* Gets the server item object from the player item object */
-stock Item:GetPlayerItemServerItem(playerid, PlayerItem:pitem)
+/* Gets the item object from the player item object */
+stock Item:GetPlayerItemItem(playerid, PlayerItem:pitem)
 {
     if(!IsValidPlayerItem(playerid, pitem))
         return Item:-1;
@@ -258,7 +279,7 @@ stock GetItemItemID(Item:item)
     return NI_Item[item][ni_i_itemid];
 }
 
-/* Sets new item intiger data inside the Item */
+/* Sets new item float data inside the Item */
 stock SetItemFloatData(Item:item, arrayId, Float:floatData)
 {
     if(!IsValidItem(item) || arrayId < 0 || arrayId >= NI_MAX_DATA_AMOUNT)
@@ -305,6 +326,16 @@ stock SetItemName(Item:item, const newname[])
         return 0;
 
     strpack(NI_Item[item][ni_i_name], newname, 128);
+    return 1;
+}
+
+/* Sets new item category inside the Item */
+stock SetItemCategory(Item:item, categoryid)
+{
+    if(!IsValidItem(item))
+        return 0;
+
+    NI_Item[item][ni_i_category] = categoryid;
     return 1;
 }
 
@@ -371,6 +402,19 @@ stock Item:GetItemFromItemID(itemid)
     return Item:-1;
 }
 
+/* Gets Item object from name */
+stock Item:GetItemFromName(const name[], bool:ignorecase = true)
+{
+    foreach(new Item:i : NI_I_ITEMS)
+    {
+        if(!strcmp(GetItemName(i), name, ignorecase))
+        {
+            return i;
+        }
+    }
+    return Item:-1;
+}
+
 /* Checks if item ID exists and is valid */
 stock IsValidItemID(itemid)
 {
@@ -413,7 +457,7 @@ stock ItemNameExists(const name[], bool:ignorecase = true)
 {
     foreach(new Item:i : NI_I_ITEMS)
     {
-        if(!strcmp(NI_Item[i][ni_i_name], name, ignorecase))
+        if(!strcmp(GetItemName(i), name, ignorecase))
         {
             return 1;
         }
@@ -532,6 +576,20 @@ stock SafeTakePlayerItem(playerid, PlayerItem:pitem, amount, & PlayerItem:nextIt
         else nextItem = PlayerItem:Iter_Next(NI_I_PITEMS[playerid], pitem);
     }
     return 1;
+}
+
+/* Returns a random player Item */
+stock PlayerItem:GetRandomPlayerItem(playerid)
+{
+    if(!IsPlayerConnected(playerid))
+        return PlayerItem:-1;
+    return PlayerItem:Iter_Random(NI_I_PITEMS[playerid]);
+}
+
+/* Returns a random Item */
+stock Item:GetRandomItem()
+{
+    return Item:Iter_Random(NI_I_ITEMS);
 }
 
 /* Gives player an item with amount */
