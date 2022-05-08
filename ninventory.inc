@@ -5,7 +5,7 @@ Script: NInventory
 Type: Include
 Version: Dev 1.1
 Author: Nickk888
-Date: 02.05.2022
+Date: 08.05.2022
 
 Social Media:
 YouTube: https://www.youtube.com/channel/UCvjbpjJXET1QS9Wa0_XVCuw
@@ -13,13 +13,12 @@ Facebook: https://www.facebook.com/Nickk888FP/
 
 Functions_________________________
 
-
 Callbacks_________________________
 OnPlayerGetItem(playerid, Item:item, amount, remains);
 
 Loops____________________________
 LOOP_ITEMS(variableName) - Loops through the server items, returns item as tag "Item".
-LOOP_PLAYER_ITEMS(playerid, variablName) - Loops through the player items, returns item as tag "PlayerItem".
+LOOP_PLAYER_ITEMS(playerid, variableName) - Loops through the player items, returns item as tag "PlayerItem".
 
 *************************************************************/
 
@@ -27,8 +26,6 @@ LOOP_PLAYER_ITEMS(playerid, variablName) - Loops through the player items, retur
 	#endinput
 #endif
 #define _nitems_included
-
-#pragma library nitems
 
 /************************************************************
                         INCLUDES
@@ -42,6 +39,9 @@ LOOP_PLAYER_ITEMS(playerid, variablName) - Loops through the player items, retur
 *************************************************************/
 
 forward OnPlayerGetItem(playerid, Item:item, amount, remains);
+forward Item:GetPlayerItemItem(playerid, PlayerItem:pitem);
+forward Item:GetRandomItem();
+forward PlayerItem:GetPlayerItemFromIndex(playerid, index);
 
 /************************************************************
                         DEFINITIONS
@@ -110,7 +110,7 @@ new NI_PlayerItem[MAX_PLAYERS][PlayerItem:MAX_PLAYER_ITEMS][NI_E_PLAYERITEM];
 
 hook OnScriptInit()
 {
-    Iter_Init(Item:NI_I_PITEMS);
+    Iter_Init(PlayerItem:NI_I_PITEMS);
     return 1;
 }
 
@@ -118,7 +118,7 @@ hook OnScriptInit()
                         FUNCTIONS
 *************************************************************/
 
-/* Creates new item returning the internal item ID */
+/* Creates new item returning the item object */
 stock Item:CreateItem(const name[], const description[] = "", stacksize = 1, category = 0, objectmodelid = 0, dbid = 0, itemid = -1, const iconname[] = "")
 {
     new Item:item = Item:Iter_Free(NI_I_ITEMS);
@@ -159,7 +159,7 @@ stock Float:GetItemFloatData(Item:item, arrayId)
     if(!IsValidItem(item) || arrayId < 0 || arrayId >= NI_MAX_DATA_AMOUNT)
         return 0;
 
-    return NI_Item[_:item][ni_i_floatData][arrayId];
+    return NI_Item[item][ni_i_floatData][arrayId];
 }
 
 /* Gets item intiger data inside the Item */
@@ -168,7 +168,7 @@ stock GetItemIntData(Item:item, arrayId)
     if(!IsValidItem(item) || arrayId < 0 || arrayId >= NI_MAX_DATA_AMOUNT)
         return 0;
 
-    return NI_Item[_:item][ni_i_intData][arrayId];
+    return NI_Item[item][ni_i_intData][arrayId];
 }
 
 /* Gets item icon name inside the Item */
@@ -189,7 +189,7 @@ stock GetItemDescription(Item:item)
     if(!IsValidItem(item))
         return unpackedItemStr;
 
-    strunpack(unpackedItemStr, NI_Item[_:item][ni_i_desc], 128);
+    strunpack(unpackedItemStr, NI_Item[item][ni_i_desc], 128);
     return unpackedItemStr;
 }
 
@@ -231,7 +231,91 @@ stock GetPlayerItemID(playerid, PlayerItem:pitem)
     return NI_PlayerItem[playerid][pitem][ni_pi_itemId];
 }
 
-/* Gets the item amount from player inventory */
+/* Returns the Player items icon name. */
+stock GetPlayerItemIconName(playerid, PlayerItem:pitem)
+{
+    new unpackedItemStr[128];
+    new Item:item = GetPlayerItemItem(playerid, pitem);
+    if(!IsValidItem(item))
+        return unpackedItemStr;
+
+    strunpack(unpackedItemStr, NI_Item[item][ni_i_iconName], 128);
+    return unpackedItemStr;
+}
+
+/* Returns the Player items name. */
+stock GetPlayerItemName(playerid, PlayerItem:pitem)
+{
+    new unpackedItemStr[128];
+    new Item:item = GetPlayerItemItem(playerid, pitem);
+    if(!IsValidItem(item))
+        return unpackedItemStr;
+
+    strunpack(unpackedItemStr, NI_Item[item][ni_i_name], 128);
+    return unpackedItemStr;
+}
+
+/* Returns the Player items description. */
+stock GetPlayerItemDescription(playerid, PlayerItem:pitem)
+{
+    new unpackedItemStr[128];
+    new Item:item = GetPlayerItemItem(playerid, pitem);
+    if(!IsValidItem(item))
+        return unpackedItemStr;
+
+    strunpack(unpackedItemStr, NI_Item[item][ni_i_desc], 128);
+    return unpackedItemStr;
+}
+
+/* Returns the player items database ID, good for storing and reading in a MySQL Database. */
+stock GetPlayerItemDatabaseID(playerid, PlayerItem:pitem)
+{
+    if(!IsValidPlayerItem(playerid, pitem))
+        return 0;
+    
+    return NI_PlayerItem[playerid][pitem][ni_pi_dbId];
+}
+
+/* Returns the player items integer data from the array. */
+stock GetPlayerItemIntData(playerid, PlayerItem:pitem, arrayId)
+{
+    return GetItemIntData(GetPlayerItemItem(playerid, pitem), arrayId);   
+}
+
+/* Returns the player items floating point data from the array. */
+stock Float:GetPlayerItemFloatData(playerid, PlayerItem:pitem, arrayId)
+{
+    return GetItemFloatData(GetPlayerItemItem(playerid, pitem), arrayId);   
+}
+
+/* Returns the player items category. */
+stock GetPlayerItemCategory(playerid, PlayerItem:pitem)
+{
+    return GetItemCategory(GetPlayerItemItem(playerid, pitem));
+}
+
+/* Returns the Player items stack size. */
+stock GetPlayerItemStackSize(playerid, PlayerItem:pitem)
+{
+    return GetItemStackSize(GetPlayerItemItem(playerid, pitem));
+}
+
+/* Returns the amount of server items created. */
+stock CountItems(playerid)
+{
+    return Iter_Count(NI_I_ITEMS);
+}
+
+/* Returns the amount of items in the Player Inventory. */
+stock CountPlayerItems(playerid)
+{
+    if(!IsPlayerConnected(playerid))
+        return 0;
+    
+    return Iter_Count(NI_I_PITEMS[playerid]);
+}
+
+/* Gets the item amount from player inventory. */
 stock GetPlayerItemAmount(playerid, PlayerItem:pitem)
 {
     if(!IsValidPlayerItem(playerid, pitem))
@@ -259,6 +343,12 @@ stock GetItemModelID(Item:item)
         return 0;
 
     return NI_Item[item][ni_i_objModelId];
+}
+
+/* Gets Object Model ID inside the Player Item. */
+stock GetPlayerItemModelID(playerid, PlayerItem:pitem)
+{
+    return GetItemModelID(GetPlayerItemItem(playerid, pitem));
 }
 
 /* Gets Database ID inside the Item */
@@ -536,11 +626,34 @@ stock TransferPlayerItemToPlayer(playeridA, playeridB, PlayerItem:item, amount)
 
     if(GetPlayerItemAmount(playeridA, item) >= amount)
     {
-        GivePlayerItem(playeridB, GetPlayerItemServerItem(playeridA, item), amount);
-        TakePlayerItem(playeridA, item, amount);
+        if(TakePlayerItem(playeridA, item, amount))
+        {
+            GivePlayerItem(playeridB, GetPlayerItemServerItem(playeridA, item), amount);
+        }
+        
         return 1;
     }
     return 0;
+}
+
+/* Gets the PlayerItem from the Iterator from the given Index.  */
+stock Item:GetItemFromIndex(index)
+{
+    new Item:item = Item:Iter_Index(NI_I_ITEMS, Item:index);
+    if(!IsValidItem(item))
+        return Item:-1;
+    
+    return item;
+}
+
+/* Gets the PlayerItem from the Iterator from the given Index.  */
+stock PlayerItem:GetPlayerItemFromIndex(playerid, index)
+{
+    new PlayerItem:pitem = PlayerItem:Iter_Index(NI_I_PITEMS[playerid], PlayerItem:index);
+    if(!IsValidPlayerItem(playerid, pitem))
+        return PlayerItem:-1;
+    
+    return pitem;
 }
 
 /* Take player item with amount */
@@ -556,8 +669,9 @@ stock TakePlayerItem(playerid, PlayerItem:pitem, amount)
         {
             RemovePlayerItem(playerid, pitem);
         }
+        return 1;
     }
-    return 1;
+    return 0;
 }
 
 /* Savely takes player item with amount. Used in loops. */
@@ -574,8 +688,9 @@ stock SafeTakePlayerItem(playerid, PlayerItem:pitem, amount, & PlayerItem:nextIt
             SafeRemovePlayerItem(playerid, pitem, nextItem);
         }
         else nextItem = PlayerItem:Iter_Next(NI_I_PITEMS[playerid], pitem);
+        return 1;
     }
-    return 1;
+    return 0;
 }
 
 /* Returns a random player Item */
@@ -583,12 +698,12 @@ stock PlayerItem:GetRandomPlayerItem(playerid)
 {
     if(!IsPlayerConnected(playerid))
         return PlayerItem:-1;
+    
     return PlayerItem:Iter_Random(NI_I_PITEMS[playerid]);
 }
 
 /* Returns a random Item */
-stock Item:GetRandomItem()
-{
+stock Item:GetRandomItem() {
     return Item:Iter_Random(NI_I_ITEMS);
 }
 
