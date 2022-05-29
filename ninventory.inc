@@ -7,16 +7,56 @@ Version: Dev 1.1
 Author: Nickk888
 Date: 08.05.2022
 
-Social Media:
+************************************************************
+                    Social Media
+*************************************************************
+
 YouTube: https://www.youtube.com/channel/UCvjbpjJXET1QS9Wa0_XVCuw
 Facebook: https://www.facebook.com/Nickk888FP/
 
-Functions_________________________
+************************************************************
+            When using a Database eg. MySQL
+*************************************************************
 
-Callbacks_________________________
-OnPlayerGetItem(playerid, Item:item, amount, remains);
+Simply create 2 tables in your Database, one for the "Server" Items and the second one 
+for the player Items. Look at the Example:
 
-Loops____________________________
+For Server Items: 
+CREATE TABLE `items` (
+	`id` INT(11) NOT NULL AUTO_INCREMENT,
+	`name` VARCHAR(128) NULL DEFAULT NULL,
+	`description` VARCHAR(128) NULL DEFAULT NULL,
+	`stacksize` INT(11) NULL DEFAULT '1',
+	`category` INT(11) NULL DEFAULT '0',
+	`objectmodelid` INT(11) NULL DEFAULT '0',
+	`iconname` VARCHAR(50) NULL DEFAULT NULL,
+	PRIMARY KEY (`id`));
+
+Use the AUTO INCREMENTed ID as the Item ID parameter so every item gets a unique Item ID.
+
+For Player Items: 
+CREATE TABLE `player_items` (
+	`id` INT(11) NULL DEFAULT '0',
+	`userid` INT(11) NULL DEFAULT '0',
+	`itemid` INT(11) NULL DEFAULT '0',
+	`amount` INT(11) NULL DEFAULT '1',
+	PRIMARY KEY (`id`)
+)
+
+************************************************************
+                        Functions
+*************************************************************
+
+************************************************************
+                        Callbacks
+*************************************************************
+
+OnPlayerItemGet(playerid, Item:item, amount, remains);
+
+************************************************************
+                        Loops
+*************************************************************
+
 LOOP_ITEMS(variableName) - Loops through the server items, returns item as tag "Item".
 LOOP_PLAYER_ITEMS(playerid, variableName) - Loops through the player items, returns item as tag "PlayerItem".
 
@@ -38,10 +78,21 @@ LOOP_PLAYER_ITEMS(playerid, variableName) - Loops through the player items, retu
                         FORWARDS
 *************************************************************/
 
-forward OnPlayerGetItem(playerid, Item:item, amount, remains);
+forward OnPlayerItemGet(playerid, Item:item, amount, remains, PlayerItem:updatedItems[], updatedItemsAmount);
+forward OnPlayerItemRemoved(playerid, PlayerItem:pitem);
+
+forward Item:CreateItem(const name[], const description[] = "", stacksize = 1, category = 0, objectmodelid = 0, dbid = 0, itemid = -1, const iconname[] = "");
 forward Item:GetPlayerItemItem(playerid, PlayerItem:pitem);
 forward Item:GetRandomItem();
+forward Item:GetItemFromItemID(itemid);
+forward Item:GetItemFromName(const name[], bool:ignorecase = true);
+forward Item:GetItemFromIndex(index);
+forward PlayerItem:SetPlayerItem(playerid, Item:item, slot, amount);
+forward PlayerItem:GetPlayerItemFromItemID(playerid, itemid);
 forward PlayerItem:GetPlayerItemFromIndex(playerid, index);
+forward PlayerItem:GetRandomPlayerItem(playerid);
+forward PlayerItem:GetPlayerItemFromName(playerid, const name[], bool:ignorecase = true);
+forward Float:GetItemFloatData(Item:item, arrayId);
 
 /************************************************************
                         DEFINITIONS
@@ -64,6 +115,7 @@ forward PlayerItem:GetPlayerItemFromIndex(playerid, index);
                         INTERNALS
 *************************************************************/
 
+#define NI_MAX_STRING_SIZE 128
 #define NI_MAX_DATA_AMOUNT 20
 #define NI_VALID_ITER_FREE(%1,%2) %2 >= 0 && %2 < Iter_End(%1)
 
@@ -83,12 +135,12 @@ enum NI_E_ITEM // Stores Server Items
 	bool:ni_i_valid,
 	ni_i_itemid,
     ni_i_dbId,
-	ni_i_name[128],
-	ni_i_desc[128],
+	ni_i_name[NI_MAX_STRING_SIZE],
+	ni_i_desc[NI_MAX_STRING_SIZE],
     ni_i_category,
 	ni_i_intData[NI_MAX_DATA_AMOUNT],
     ni_i_objModelId,
-	ni_i_iconName[128],
+	ni_i_iconName[NI_MAX_STRING_SIZE],
 	ni_i_stackSize,
 	Float:ni_i_floatData[NI_MAX_DATA_AMOUNT]
 };
@@ -153,11 +205,10 @@ stock Item:CreateItem(const name[], const description[] = "", stacksize = 1, cat
 }
 
 /* Gets item float data inside the Item */
-forward Float:GetItemFloatData(Item:item, arrayId);
 stock Float:GetItemFloatData(Item:item, arrayId)
 {
     if(!IsValidItem(item) || arrayId < 0 || arrayId >= NI_MAX_DATA_AMOUNT)
-        return 0;
+        return Float:0.0;
 
     return NI_Item[item][ni_i_floatData][arrayId];
 }
@@ -220,6 +271,16 @@ stock GetItemStackSize(Item:item)
         return 0;
 
     return NI_Item[item][ni_i_stackSize];
+}
+
+/* Sets new item icon name inside the Item */
+stock SetPlayerItemDatabaseID(playerid, PlayerItem:pitem, dbid)
+{
+    if(!IsValidPlayerItem(playerid, pitem))
+        return 0;
+
+    NI_PlayerItem[playerid][pitem][ni_pi_dbId] = dbid;
+    return 1;
 }
 
 /* Gets the item ID from player inventory */
@@ -301,7 +362,7 @@ stock GetPlayerItemStackSize(playerid, PlayerItem:pitem)
 }
 
 /* Returns the amount of server items created. */
-stock CountItems(playerid)
+stock CountItems()
 {
     return Iter_Count(NI_I_ITEMS);
 }
@@ -482,7 +543,7 @@ stock IsValidItem(Item:item)
 /* Gets Item object from itemid */
 stock Item:GetItemFromItemID(itemid)
 {
-    foreach(new Item:i : NI_I_ITEMS)
+    LOOP_ITEMS(i)
     {
         if(NI_Item[i][ni_i_valid] && NI_Item[i][ni_i_itemid] == itemid)
         {
@@ -495,7 +556,7 @@ stock Item:GetItemFromItemID(itemid)
 /* Gets Item object from name */
 stock Item:GetItemFromName(const name[], bool:ignorecase = true)
 {
-    foreach(new Item:i : NI_I_ITEMS)
+    LOOP_ITEMS(i)
     {
         if(!strcmp(GetItemName(i), name, ignorecase))
         {
@@ -508,7 +569,7 @@ stock Item:GetItemFromName(const name[], bool:ignorecase = true)
 /* Checks if item ID exists and is valid */
 stock IsValidItemID(itemid)
 {
-    foreach(new Item:i : NI_I_ITEMS)
+    LOOP_ITEMS(i)
     {
         if(NI_Item[i][ni_i_valid] && NI_Item[i][ni_i_itemid] == itemid)
         {
@@ -518,14 +579,53 @@ stock IsValidItemID(itemid)
     return 0;
 }
 
-/* Gets Player Item object from itemid */
-stock PlayerItem:GetPlayerItemFromItemID(playerid, itemid)
+/* Checks if a Player Item exists passing the name. */
+stock PlayerItemExistsByName(playerid, const name[], bool:ignorecase = true)
 {
-    foreach(new PlayerItem:i : NI_I_PITEMS[playerid])
+    LOOP_PLAYER_ITEMS(playerid, i)
+    {
+        if(NI_PlayerItem[playerid][i][ni_pi_valid] && !strcmp(GetPlayerItemName(playerid, i), name, ignorecase))
+        {
+            return 1;
+        }
+    }
+    return 0
+}
+
+/* Checks if a Player Item exists passing the item ID. */
+stock PlayerItemExistsByItemID(playerid, itemid)
+{
+    LOOP_PLAYER_ITEMS(playerid, i)
     {
         if(NI_PlayerItem[playerid][i][ni_pi_valid] && NI_PlayerItem[playerid][i][ni_pi_itemId] == itemid)
         {
-            return PlayerItem:i;
+            return 1;
+        }
+    }
+    return 0
+}
+
+/* Gets Player Item object from itemid */
+stock PlayerItem:GetPlayerItemFromItemID(playerid, itemid)
+{
+    LOOP_PLAYER_ITEMS(playerid, i)
+    {
+        if(NI_PlayerItem[playerid][i][ni_pi_valid] && NI_PlayerItem[playerid][i][ni_pi_itemId] == itemid)
+        {
+            return i;
+        }
+    }
+    return PlayerItem:-1;
+}
+
+/* Gets a Player Item object from the name. */
+stock PlayerItem:GetPlayerItemFromName(playerid, const name[], bool:ignorecase = true)
+{
+    LOOP_PLAYER_ITEMS(playerid, i)
+    {
+        if(NI_PlayerItem[playerid][i][ni_pi_valid] && !strcmp(GetPlayerItemName(playerid, i), name, ignorecase))
+        {
+            return i;
         }
     }
     return PlayerItem:-1;
@@ -534,7 +634,7 @@ stock PlayerItem:GetPlayerItemFromItemID(playerid, itemid)
 /* Checks if player item ID exists and is valid */
 stock IsValidPlayerItem(playerid, PlayerItem:item)
 {
-    if(_:item >= 0 && _:item < MAX_SERVER_ITEMS && NI_PlayerItem[playerid][item][ni_pi_valid])
+    if(_:item >= 0 && _:item < MAX_PLAYER_ITEMS && NI_PlayerItem[playerid][item][ni_pi_valid])
     {
         return 1;
     }
@@ -545,7 +645,7 @@ stock IsValidPlayerItem(playerid, PlayerItem:item)
 /* Checks if item exists using the name */
 stock ItemNameExists(const name[], bool:ignorecase = true)
 {
-    foreach(new Item:i : NI_I_ITEMS)
+    LOOP_ITEMS(i)
     {
         if(!strcmp(GetItemName(i), name, ignorecase))
         {
@@ -586,30 +686,34 @@ stock SafeRemoveItem(Item:item, & Item:nextItem)
 }
 
 /* Removes player item */
-stock RemovePlayerItem(playerid, PlayerItem:item)
+stock RemovePlayerItem(playerid, PlayerItem:pitem, bool:callCallback = true)
 {
-    if(!IsValidPlayerItem(playerid, item))
+    if(!IsValidPlayerItem(playerid, pitem))
         return 0;
 
-    if(Iter_Remove(NI_I_PITEMS[playerid], item))
+    if(Iter_Remove(NI_I_PITEMS[playerid], pitem))
     {
-        NI_PlayerItem[playerid][item][ni_pi_valid] = false;
+        if(callCallback)
+            CallLocalFunction("OnPlayerItemRemoved", "ii", playerid, _:pitem);
+        NI_PlayerItem[playerid][pitem][ni_pi_valid] = false;
         return 1;
     }
     return 0;
 }
 
 /* Safely removes player item, mostly used in iterators */
-stock SafeRemovePlayerItem(playerid, PlayerItem:item, & PlayerItem:nextItem)
+stock SafeRemovePlayerItem(playerid, PlayerItem:pitem, & PlayerItem:nextItem, bool:callCallback = true)
 {
-    if(!IsValidPlayerItem(playerid, item))
+    if(!IsValidPlayerItem(playerid, pitem))
         return 0;
 
     new next;
-    if(Iter_SafeRemove(NI_I_PITEMS[playerid], item, next))
+    if(Iter_SafeRemove(NI_I_PITEMS[playerid], pitem, next))
     {
         nextItem = PlayerItem:next;
-        NI_PlayerItem[playerid][item][ni_pi_valid] = false;
+        if(callCallback)
+            CallLocalFunction("OnPlayerItemRemoved", "ii", playerid, _:pitem);
+        NI_PlayerItem[playerid][pitem][ni_pi_valid] = false;
         return 1;
     }
     return 0;
@@ -628,7 +732,7 @@ stock TransferPlayerItemToPlayer(playeridA, playeridB, PlayerItem:item, amount)
     {
         if(TakePlayerItem(playeridA, item, amount))
         {
-            GivePlayerItem(playeridB, GetPlayerItemServerItem(playeridA, item), amount);
+            GivePlayerItem(playeridB, GetPlayerItemItem(playeridA, item), amount);
         }
         
         return 1;
@@ -707,6 +811,49 @@ stock Item:GetRandomItem() {
     return Item:Iter_Random(NI_I_ITEMS);
 }
 
+/* Clears player inventory */
+stock ClearPlayerItems(playerid)
+{
+    LOOP_PLAYER_ITEMS(playerid, i)
+    {
+        NI_PlayerItem[playerid][i][ni_pi_valid] = false;
+    }
+    Iter_Clear(NI_I_PITEMS[playerid]);
+    return 1;
+}
+    
+
+PlayerItem:SetPlayerItem(playerid, Item:item, slot, amount)
+{
+    if(!IsValidItem(item))
+        return PlayerItem:-1;
+
+    // Gets the item ID from the Item object.
+    new itemid = GetItemItemID(item);
+
+    // Gets the stacksize from the Item object.
+    new stacksize = GetItemStackSize(item);
+
+    new PlayerItem:pitem = PlayerItem:slot;
+    if(NI_VALID_ITER_FREE(NI_I_PITEMS[playerid], _:pitem))
+    {
+        if(NI_PlayerItem[playerid][pitem][ni_pi_valid] == false)
+        {
+            // Create the new inventory slot using the free slot ID.
+            Iter_Add(NI_I_PITEMS[playerid], PlayerItem:pitem);
+
+            // Insert data to the inventory slot.
+            NI_PlayerItem[playerid][pitem][ni_pi_valid] = true;
+            NI_PlayerItem[playerid][pitem][ni_pi_item] = item;
+            NI_PlayerItem[playerid][pitem][ni_pi_amount] = clamp(amount, 0, stacksize);
+            NI_PlayerItem[playerid][pitem][ni_pi_itemId] = itemid;
+            NI_PlayerItem[playerid][pitem][ni_pi_dbId] = -1;
+            return PlayerItem:pitem;
+        }
+    }
+    return PlayerItem:-1;
+}
+
 /* Gives player an item with amount */
 stock GivePlayerItem(playerid, Item:item, amount, bool:callCallback = true)
 {
@@ -729,11 +876,17 @@ stock GivePlayerItem(playerid, Item:item, amount, bool:callCallback = true)
     // Check if stacksize is valid.
     if(stacksize <= 0)
         return 0;
+
+    // Variables for identifying updated items returned in the callback
+    // Good for a saving system like MySQL
+    new PlayerItem:currentItem = PlayerItem:-1;
+    new updatedItemsAmount = 0;
+    new PlayerItem:updatedItems[MAX_PLAYER_ITEMS];
     
     /******************************************************
       Try adding item to existing items in the inventory
     *******************************************************/
-    foreach(new PlayerItem:i : NI_I_PITEMS[playerid])
+    LOOP_PLAYER_ITEMS(playerid, i)
     {
         // When item has been found.
         if(NI_PlayerItem[playerid][i][ni_pi_itemId] == itemid)
@@ -748,9 +901,18 @@ stock GivePlayerItem(playerid, Item:item, amount, bool:callCallback = true)
                     NI_PlayerItem[playerid][i][ni_pi_amount]++;
                     amountCache--;
                     amountGot++;
+                    if(currentItem != i)
+                    {
+                        updatedItemsAmount++;
+                        currentItem = i;
+                    }
+                    updatedItems[updatedItemsAmount - 1] = i;
                 }
                 // Exit loop when not possible to insert.
-                else break;
+                else 
+                {
+                    break;
+                }
             }
         }
     }
@@ -794,9 +956,18 @@ stock GivePlayerItem(playerid, Item:item, amount, bool:callCallback = true)
                     NI_PlayerItem[playerid][pitem][ni_pi_amount]++;
                     amountCache--;
                     amountGot++;
+                    if(currentItem != pitem)
+                    {
+                        updatedItemsAmount++;
+                        currentItem = pitem;
+                    }
+                    updatedItems[updatedItemsAmount - 1] = pitem;
                 }
                 // Exit loop when no room inside the slot.
-                else break;
+                else 
+                {
+                    break;
+                }
             }
             // Resetting the object variable to be invalid so the loop can repeat creating a new slot
             // when current slot is full 
@@ -806,10 +977,10 @@ stock GivePlayerItem(playerid, Item:item, amount, bool:callCallback = true)
         else break;
     }
 
-    // Call "OnPlayerGetItem" callback inserting the ID of the player, the Item object, the amount
+    // Call "OnPlayerItemGet" callback inserting the ID of the player, the Item object, the amount
     // which has been added and the remainig amount which couldn't be added.
     if(callCallback)
-        CallLocalFunction("OnPlayerGetItem", "iiii", playerid, _:item, amountGot, amountCache);
+        CallLocalFunction("OnPlayerItemGet", "iiiiad", playerid, _:item, amountGot, amountCache, _:updatedItems, updatedItemsAmount);
     return 1;
 }
 
