@@ -823,7 +823,7 @@ stock ClearPlayerItems(playerid)
 }
     
 
-PlayerItem:SetPlayerItem(playerid, Item:item, slot, amount)
+stock PlayerItem:SetPlayerItem(playerid, Item:item, slot, amount)
 {
     if(!IsValidItem(item))
         return PlayerItem:-1;
